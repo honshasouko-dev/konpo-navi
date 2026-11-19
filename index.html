@@ -31,6 +31,7 @@ h2{font-size:18px;margin:18px 0 6px}
 .step-body{margin-top:8px}
 .step-body img{width:100%;border-radius:8px;background:#fff;cursor:zoom-in;display:block;margin-bottom:8px}
 .step-body p{margin:0;font-size:15px;line-height:1.6}
+.imgerr{font-size:12px;color:#c00;margin-bottom:6px}
 .check{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:15px;font-weight:bold}
 .check input{width:24px;height:24px}
 .step.ok{border-color:var(--green);background:#f1fbf4}
@@ -55,8 +56,8 @@ h2{font-size:18px;margin:18px 0 6px}
 <div id="zoom"><img></div>
 <script>
 // ===== 設定：Googleスプレッドシートを「ウェブに公開（CSV）」したURLを貼る =====
-const ORDERS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=0&single=true&output=csv";  // 指示書シート
-const STEPS_CSV_URL  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=300963233&single=true&output=csv";  // 梱包手順シート
+const ORDERS_CSV_URL = "";  // 指示書シート
+const STEPS_CSV_URL  = "";  // 梱包手順シート
 const ORDERS_FALLBACK = "orders.csv";
 const STEPS_FALLBACK  = "steps.csv";
 
@@ -77,11 +78,19 @@ async function init(){
   catch(e){document.getElementById("result").innerHTML='<p class="msg">データを読み込めませんでした。通信状態を確認してください。</p>';}
 }
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// 写真のファイル名を整える：フォルダ名（images/ など）や前後の空白を取り、拡張子を小文字にする
+function imgName(r){
+  let v=(r["画像"]||r["写真"]||r["画像ファイル"]||"").trim();
+  if(!v) return "";
+  if(/^https?:\/\//i.test(v)) return v;
+  v=v.replace(/\\/g,"/").split("/").pop().trim();
+  return v.replace(/\.(jpe?g|png|gif|webp)$/i,m=>m.toLowerCase());
+}
 
 function show(no){
   no=String(no).replace(/\D/g,"");
   const box=document.getElementById("result");
-  const o=orders.find(r=>r["出荷指示番号"]===no);
+  const o=orders.find(r=>String(r["出荷指示番号"]).replace(/\D/g,"")===no);
   if(!o){box.innerHTML=`<p class="msg">指示書番号「${esc(no)}」が見つかりません。番号を確認し、分からない場合は責任者に確認してください。</p>`;return;}
   const methods=(o["梱包方法"]||"").split(/[・\n]/).map(s=>s.trim()).filter(Boolean);
   const match=c=>{c=(c||"").trim();if(!c||c==="共通")return true;
@@ -98,8 +107,9 @@ function show(no){
   steps.filter(r=>cond(r)==="該当なし"?!hit[r["手順番号"]]:match(cond(r))).forEach(r=>{(groups[r["手順番号"]]=groups[r["手順番号"]]||[]).push(r);});
   Object.keys(groups).sort((a,b)=>a-b).forEach(k=>{const rows=groups[k];
     html+=`<div class="card step"><div class="step-head"><span class="num">${esc(k)}</span>${esc(rows[0]["手順名"])}</div>`;
-    rows.forEach(r=>{html+=`<div class="sub">${r["分岐"]&&r["分岐"]!=="共通"?`<span class="branch">${esc(r["分岐"])}</span>`:""}
-      <div class="step-body">${r["画像"]?`<img src="${esc(r["画像"])}" alt="" onerror="this.remove()">`:""}<p>${esc(r["説明"])}</p></div>
+    rows.forEach(r=>{const im=imgName(r);
+      html+=`<div class="sub">${r["分岐"]&&r["分岐"]!=="共通"?`<span class="branch">${esc(r["分岐"])}</span>`:""}
+      <div class="step-body">${im?`<img src="${esc(im)}" alt="" data-name="${esc(im)}">`:""}<p>${esc(r["説明"])}</p></div>
       ${r["注意"]?`<div class="warn"><b>⚠ 注意</b>${esc(r["注意"])}</div>`:""}</div>`;});
     html+=`<label class="check"><input type="checkbox">確認した</label></div>`;});
   html+=`<button class="btn done" id="doneBtn" disabled>✔ 確認完了</button>`;
@@ -107,7 +117,10 @@ function show(no){
   const cbs=[...box.querySelectorAll(".step input")],done=document.getElementById("doneBtn");
   cbs.forEach(cb=>cb.onchange=()=>{cb.closest(".step").classList.toggle("ok",cb.checked);done.disabled=!cbs.every(c=>c.checked);});
   done.onclick=()=>{alert("確認完了しました。");box.innerHTML="";document.getElementById("noInput").value="";window.scrollTo(0,0);};
-  box.querySelectorAll(".step-body img").forEach(img=>img.onclick=()=>{const z=document.getElementById("zoom");z.querySelector("img").src=img.src;z.style.display="flex";});
+  box.querySelectorAll(".step-body img").forEach(img=>{
+    img.onclick=()=>{const z=document.getElementById("zoom");z.querySelector("img").src=img.src;z.style.display="flex";};
+    img.onerror=()=>{const d=document.createElement("div");d.className="imgerr";d.textContent="写真「"+img.dataset.name+"」が見つかりません";img.replaceWith(d);};
+  });
 }
 document.getElementById("zoom").onclick=e=>e.currentTarget.style.display="none";
 document.getElementById("searchBtn").onclick=()=>show(document.getElementById("noInput").value);
