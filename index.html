@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>梱包ナビ</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{--navy:#1f3f7a;--blue:#1a5fd0;--green:#2e9e4f;--yellow:#fbe08a;--bg:#f2f4f8}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Hiragino Sans","Meiryo",sans-serif;background:var(--bg);color:#222}
+header{background:var(--navy);color:#fff;text-align:center;padding:14px;font-size:20px;font-weight:bold;position:sticky;top:0;z-index:10}
+main{max-width:520px;margin:0 auto;padding:12px}
+.btn{display:block;width:100%;border:none;border-radius:10px;padding:14px;font-size:17px;font-weight:bold;color:#fff;cursor:pointer}
+.scan{background:var(--blue)}
+.done{background:var(--green);margin-top:14px}
+.done:disabled{background:#aaa}
+#reader{margin-top:10px;border-radius:10px;overflow:hidden}
+.manual{display:flex;gap:8px;margin-top:10px}
+.manual input{flex:1;font-size:17px;padding:10px;border:1px solid #ccc;border-radius:8px}
+.manual button{padding:10px 16px;border:none;border-radius:8px;background:var(--navy);color:#fff;font-size:16px}
+.card{background:#fff;border:1px solid #dde2ea;border-radius:10px;padding:12px;margin-top:12px}
+.info div{margin:4px 0;font-size:16px}
+.info b{display:inline-block;width:6em;color:#555;font-weight:normal}
+.tag{display:inline-block;background:#e8eefb;color:var(--navy);border-radius:6px;padding:3px 8px;margin:4px 4px 0 0;font-size:14px;font-weight:bold}
+h2{font-size:18px;margin:18px 0 6px}
+.step-head{display:flex;align-items:center;gap:8px;font-weight:bold;font-size:17px}
+.num{background:var(--blue);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sub{margin-top:10px;border-top:1px dashed #dde2ea;padding-top:8px}
+.branch{display:inline-block;background:var(--navy);color:#fff;font-size:13px;border-radius:4px;padding:2px 8px}
+.step-body{margin-top:8px}
+.step-body img{width:100%;border-radius:8px;background:#fff;cursor:zoom-in;display:block;margin-bottom:8px}
+.step-body p{margin:0;font-size:15px;line-height:1.6}
+.check{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:15px;font-weight:bold}
+.check input{width:24px;height:24px}
+.step.ok{border-color:var(--green);background:#f1fbf4}
+.warn{background:var(--yellow);border-radius:8px;padding:10px;margin-top:8px;font-size:14px}
+.warn b{display:block;margin-bottom:2px}
+.msg{color:#c00;font-weight:bold;margin-top:10px}
+#zoom{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:20}
+#zoom img{max-width:95%;max-height:90%}
+</style>
+</head>
+<body>
+<header>梱包ナビ</header>
+<main>
+  <button class="btn scan" id="scanBtn">▥ 出荷指示書を読み取る</button>
+  <div id="reader"></div>
+  <div class="manual">
+    <input id="noInput" inputmode="numeric" placeholder="指示書番号を入力">
+    <button id="searchBtn">表示</button>
+  </div>
+  <div id="result"></div>
+</main>
+<div id="zoom"><img></div>
+<script>
+// ===== 設定：Googleスプレッドシートを「ウェブに公開（CSV）」したURLを貼る =====
+const ORDERS_CSV_URL = "";  // 指示書シート
+const STEPS_CSV_URL  = "";  // 梱包手順シート
+const ORDERS_FALLBACK = "data/orders.csv";
+const STEPS_FALLBACK  = "data/steps.csv";
+
+let orders=[], steps=[], scanner=null;
+function parseCSV(text){
+  const rows=[];let row=[],f="",q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){ if(c=='"'){ if(text[i+1]=='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c=='"') q=true; else if(c==','){row.push(f);f="";}
+    else if(c=='\n'){row.push(f);rows.push(row);row=[];f="";} else if(c!='\r') f+=c;}
+  if(f!==""||row.length){row.push(f);rows.push(row);}
+  const head=rows.shift().map(h=>h.replace(/^\uFEFF/,"").trim());
+  return rows.filter(r=>r.some(v=>v.trim())).map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
+async function load(url,fb){const u=url||fb;const res=await fetch(u+(u.includes("?")?"&":"?")+"t="+Date.now());return parseCSV(await res.text());}
+async function init(){
+  try{[orders,steps]=await Promise.all([load(ORDERS_CSV_URL,ORDERS_FALLBACK),load(STEPS_CSV_URL,STEPS_FALLBACK)]);}
+  catch(e){document.getElementById("result").innerHTML='<p class="msg">データを読み込めませんでした。通信状態を確認してください。</p>';}
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function show(no){
+  no=String(no).replace(/\D/g,"");
+  const box=document.getElementById("result");
+  const o=orders.find(r=>r["出荷指示番号"]===no);
+  if(!o){box.innerHTML=`<p class="msg">指示書番号「${esc(no)}」が見つかりません。番号を確認し、分からない場合は責任者に確認してください。</p>`;return;}
+  const methods=(o["梱包方法"]||"").split(/[・\n]/).map(s=>s.trim()).filter(Boolean);
+  // 条件：共通＝常に表示／「○○以外」＝○○が無いとき／「A／B」＝どれかがあるとき／該当なし＝同じ手順の他の分岐が無いとき
+  const match=c=>{c=(c||"").trim();if(!c||c==="共通")return true;
+    if(c.endsWith("以外"))return !methods.includes(c.slice(0,-2));
+    return c.split(/[／\/]/).some(w=>methods.includes(w.trim()));};
+  const cond=r=>(r["条件"]||"").trim();
+  const hit={};
+  steps.filter(r=>cond(r)!=="該当なし"&&cond(r)!=="共通"&&cond(r)!==""&&match(cond(r))).forEach(r=>hit[r["手順番号"]]=true);
+  let html=`<div class="card info"><div><b>指示書番号</b>${esc(no)}</div>
+    ${o["注文主名"]?`<div><b>注文主</b>${esc(o["注文主名"])}</div>`:""}
+    <div><b>数量</b>${esc(o["受注数"]||"")}</div>
+    <div>${methods.map(m=>`<span class="tag">${esc(m)}</span>`).join("")||'<span class="tag">指定なし</span>'}</div></div><h2>梱包手順</h2>`;
+  const groups={};
+  steps.filter(r=>cond(r)==="該当なし"?!hit[r["手順番号"]]:match(cond(r))).forEach(r=>{(groups[r["手順番号"]]=groups[r["手順番号"]]||[]).push(r);});
+  Object.keys(groups).sort((a,b)=>a-b).forEach(k=>{const rows=groups[k];
+    html+=`<div class="card step"><div class="step-head"><span class="num">${esc(k)}</span>${esc(rows[0]["手順名"])}</div>`;
+    rows.forEach(r=>{html+=`<div class="sub">${r["分岐"]&&r["分岐"]!=="共通"?`<span class="branch">${esc(r["分岐"])}</span>`:""}
+      <div class="step-body">${r["画像"]?`<img src="${esc(r["画像"])}" alt="" onerror="this.remove()">`:""}<p>${esc(r["説明"])}</p></div>
+      ${r["注意"]?`<div class="warn"><b>⚠ 注意</b>${esc(r["注意"])}</div>`:""}</div>`;});
+    html+=`<label class="check"><input type="checkbox">確認した</label></div>`;});
+  html+=`<button class="btn done" id="doneBtn" disabled>✔ 確認完了</button>`;
+  box.innerHTML=html;
+  const cbs=[...box.querySelectorAll(".step input")],done=document.getElementById("doneBtn");
+  cbs.forEach(cb=>cb.onchange=()=>{cb.closest(".step").classList.toggle("ok",cb.checked);done.disabled=!cbs.every(c=>c.checked);});
+  done.onclick=()=>{alert("確認完了しました。");box.innerHTML="";document.getElementById("noInput").value="";window.scrollTo(0,0);};
+  box.querySelectorAll(".step-body img").forEach(img=>img.onclick=()=>{const z=document.getElementById("zoom");z.querySelector("img").src=img.src;z.style.display="flex";});
+}
+document.getElementById("zoom").onclick=e=>e.currentTarget.style.display="none";
+document.getElementById("searchBtn").onclick=()=>show(document.getElementById("noInput").value);
+document.getElementById("noInput").onkeydown=e=>{if(e.key==="Enter")show(e.target.value);};
+document.getElementById("scanBtn").onclick=async()=>{
+  if(scanner){await scanner.stop().catch(()=>{});scanner=null;document.getElementById("reader").innerHTML="";return;}
+  scanner=new Html5Qrcode("reader");
+  try{await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:120}},async text=>{
+      await scanner.stop();scanner=null;document.getElementById("reader").innerHTML="";
+      document.getElementById("noInput").value=text;show(text);});}
+  catch(e){scanner=null;alert("カメラを起動できません。ブラウザのカメラ許可を確認してください。");}
+};
+init();
+</script>
+</body>
+</html>
