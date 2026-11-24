@@ -1,36 +1,227 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>梱包ナビ</title><script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script><style>
-*{box-sizing:border-box}body{margin:0;background:#f2f5fa;font-family:system-ui,'Meiryo',sans-serif;color:#17233c}header{background:#20447e;color:white;text-align:center;padding:15px;font-size:21px;font-weight:bold}main{max-width:540px;margin:auto;padding:14px}button{cursor:pointer;border:0;border-radius:9px;padding:12px 16px;font-size:16px;font-weight:bold}.scan,.complete{width:100%;background:#1962ce;color:white}.complete{background:#26964b;margin-top:15px}.complete:disabled{background:#aaa}.lookup{display:flex;gap:8px;margin-top:10px}.lookup input{min-width:0;flex:1;padding:12px;border:1px solid #bbb;border-radius:8px;font-size:17px}.lookup button{background:#20447e;color:white}.card{background:white;border-radius:11px;padding:14px;margin:13px 0;border:1px solid #dce4f0}.step-title{font-size:18px;font-weight:bold;display:flex;gap:10px;align-items:center}.num{border-radius:50%;width:30px;height:30px;display:grid;place-items:center;background:#1962ce;color:white}.sub{border-top:1px solid #e3e7ee;padding-top:12px;margin-top:12px}.tag{background:#e5eeff;color:#20447e;border-radius:5px;padding:3px 8px;display:inline-block;font-size:13px;font-weight:bold;margin:4px 5px 4px 0}.photo{width:100%;height:auto;display:block;border-radius:8px;margin:9px 0}.explain{line-height:1.7;white-space:pre-wrap}.warn{background:#fff1bc;padding:10px;border-radius:7px;margin-top:8px;white-space:pre-wrap}.check{display:flex;align-items:center;gap:10px;margin-top:12px}.check input{width:23px;height:23px}.ok{border-color:#26964b;background:#f2fbf5}.error{color:#b00020;font-weight:bold}.missing{color:#b00020;font-size:12px}.zoom{position:fixed;inset:0;background:#000d;display:none;align-items:center;justify-content:center;z-index:30}.zoom img{max-width:95%;max-height:94%}#reader{margin-top:10px}
-
-/* iPad向け 1画面1手順 */
-body{min-height:100vh}main{max-width:1050px;padding:14px 20px 120px}.summary{background:white;border:1px solid #dce4f0;border-radius:10px;padding:12px 18px;font-size:16px}.summary .qty{margin-left:24px}.methods{margin-top:6px}.progress{display:flex;align-items:center;gap:5px;justify-content:space-between;margin:12px 0;overflow-x:auto;white-space:nowrap}.progress-item{border:1px solid #d0d9e8;border-radius:8px;padding:9px 12px;background:white;font-weight:bold;font-size:14px}.progress-item.active{background:#1c5fc4;color:white;border-color:#1c5fc4}.progress-item.finished{border-color:#26964b;color:#167a38}.arrow{color:#8b96a8;font-size:22px}.current{margin:8px 0;padding:22px 25px}.step-title{font-size:24px}.sub{padding-top:12px;margin-top:12px}.explain{font-size:19px;font-weight:500;line-height:1.65;margin:10px 0}.warn{font-size:17px}.photo{max-height:270px;max-width:440px;width:auto;object-fit:contain;margin:12px auto 4px}.photo-hint{text-align:center;font-size:13px;color:#52647c;margin:0}.nav-buttons{display:flex;gap:14px;position:sticky;bottom:0;background:#f2f5fa;padding:14px 0}.nav-buttons button{flex:1;padding:17px;font-size:19px;color:white;background:#1c5fc4}.nav-buttons button:first-child{background:#5a6d86}.nav-buttons button:disabled{opacity:.4}.nav-buttons button:last-child{background:#26964b}.finished-screen{text-align:center;padding:40px}.finished-screen button{background:#1c5fc4;color:white}@media(max-width:650px){main{padding:10px 10px 100px}.progress-item{padding:8px;font-size:12px}.arrow{font-size:15px}.current{padding:14px}.step-title{font-size:19px}.explain{font-size:17px}.photo{max-width:100%;max-height:220px}.nav-buttons button{font-size:15px;padding:15px 8px}}
-</style></head><body><header>梱包ナビ</header><main><button class="scan" id="scan">▥ 出荷指示書を読み取る</button><div id="reader"></div><div class="lookup"><input id="number" placeholder="指示書番号を入力" inputmode="numeric"><button id="lookup">表示</button></div><div id="result"></div></main><div class="zoom" id="zoom"><img alt="拡大写真"></div><script>
-const ORDERS_CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=0&single=true&output=csv";
-const STEPS_CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=300963233&single=true&output=csv";
-let orders=[],steps=[],scanner=null,loaded=false,currentPages=[],pageIndex=0,donePages=new Set();
-const $=id=>document.getElementById(id);const escapeHTML=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function csv(text){text=text.replace(/^\uFEFF/,'');let rows=[],row=[],v='',quote=false;for(let i=0;i<text.length;i++){let c=text[i];if(quote){if(c==='"'){if(text[i+1]==='"'){v+='"';i++}else quote=false}else v+=c}else if(c==='"')quote=true;else if(c===','){row.push(v);v=''}else if(c==='\n'){row.push(v);rows.push(row);row=[];v=''}else if(c!=='\r')v+=c}if(v||row.length){row.push(v);rows.push(row)}let head=(rows.shift()||[]).map(x=>x.trim());return rows.filter(r=>r.some(x=>x.trim())).map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||'').trim()])))}
-async function load(url){let r=await fetch(url+'&_='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);let t=await r.text();if(/^\s*<!doctype|^\s*<html/i.test(t))throw Error('CSVではありません');return csv(t)}
-async function init(){try{[orders,steps]=await Promise.all([load(ORDERS_CSV_URL),load(STEPS_CSV_URL)]);loaded=true}catch(e){$('result').innerHTML='<p class="error">データを読み込めません。公開CSVの設定や通信を確認してください。</p>';console.error(e)}}
-function tokens(raw){return String(raw||'').split(/[・\n、]/).map(s=>s.trim()).filter(Boolean)}
-function condition(text,values){text=String(text||'').trim();if(text==='共通'||text==='')return true;if(text==='該当なし')return false;
-// 「A・B以外」はAに該当し、Bには該当しない場合。
-return text.split(/[・＋+]/).every(part=>part.split(/[／/]/).some(t=>{t=t.trim();return t.endsWith('以外')?!values.includes(t.slice(0,-2)):values.includes(t)}))}
-function imagePath(row){let s=(row['画像']||row['写真']||'').trim();if(!s)return '';if(/^https?:\/\//i.test(s))return s;return s.replace(/\\/g,'/').split('/').pop().trim()}
-function choose(group,values){let ordinary=group.filter(r=>r['条件']!=='該当なし'&&condition(r['条件'],values));let defaults=group.filter(r=>r['条件']==='該当なし');if(!ordinary.some(r=>r['条件']!=='共通'&&r['条件']!==''))ordinary.push(...defaults);
-let always=ordinary.filter(r=>(r['表示形式']||'全表示')!=='優先');let priority=ordinary.filter(r=>r['表示形式']==='優先');if(priority.length){let max=Math.max(...priority.map(r=>Number(r['優先度'])||0));always.push(...priority.filter(r=>(Number(r['優先度'])||0)===max))}return always}
-function show(input){let n=String(input||'').replace(/\D/g,'');let out=$('result');if(!loaded){out.innerHTML='<p class="error">データ読み込み中です。再度お試しください。</p>';return}let order=orders.find(r=>String(r['出荷指示番号']||'').replace(/\D/g,'')===n);if(!order){out.innerHTML=`<p class="error">指示書番号「${escapeHTML(n)}」が見つかりません。</p><small>指示書 ${orders.length}件／手順 ${steps.length}件 読み込み済み</small>`;return}let values=tokens(order['梱包方法']);let html=`<section class="card"><b>指示書番号：</b>${escapeHTML(n)}<br><b>数量：</b>${escapeHTML(order['受注数']||'')}<br>${values.map(v=>`<span class="tag">${escapeHTML(v)}</span>`).join('')}</section><h2>梱包手順</h2>`;
-let groups={};steps.forEach(r=>(groups[r['手順番号']]??=[]).push(r));
-currentPages=Object.keys(groups).sort((a,b)=>Number(a)-Number(b)).map(k=>({number:k,rows:choose(groups[k],values)})).filter(p=>p.rows.length);
-pageIndex=0;donePages=new Set();window.currentOrder={number:n,values,quantity:order['受注数']||''};renderPage();}
-function renderPage(){let out=$('result');if(!currentPages.length){out.innerHTML='<p class="error">該当する手順がありません。条件列を確認してください。</p>';return}
-const p=currentPages[pageIndex],total=currentPages.length,order=window.currentOrder;
-let progress='<nav class="progress" aria-label="手順の進捗">'+currentPages.map((x,i)=>`<span class="progress-item ${i===pageIndex?'active':''} ${donePages.has(i)?'finished':''}">${escapeHTML(x.number)} ${escapeHTML(({1:'確認',2:'ラベル',3:'ケース',4:'QR照合',5:'緩衝材'})[x.number]||x.rows[0]['手順名'])}</span>`).join('<span class="arrow">›</span>')+'</nav>';
-let html=`<div class="summary"><div><b>出荷指示番号</b> ${escapeHTML(order.number)} <b class="qty">数量</b> ${escapeHTML(order.quantity)}</div><div class="methods"><b>梱包方法</b> ${order.values.map(v=>`<span class="tag">${escapeHTML(v)}</span>`).join('')||'指定なし'}</div></div>${progress}<section class="card current"><div class="step-title"><span class="num">${escapeHTML(p.number)}</span><span>手順 ${pageIndex+1}／${total}　${escapeHTML(p.rows[0]['手順名'])}</span></div>`;
-p.rows.forEach(r=>{let path=imagePath(r);html+=`<div class="sub">${r['分岐']&&r['分岐']!=='共通'?`<span class="tag">${escapeHTML(r['分岐'])}</span>`:''}<div class="explain">${escapeHTML(r['説明'])}</div>${r['注意']?`<div class="warn">⚠ ${escapeHTML(r['注意'])}</div>`:''}${path?`<img class="photo" data-photo="${escapeHTML(path)}" src="${escapeHTML(path)}" alt="手順写真"><p class="photo-hint">写真をタップして拡大</p>`:''}</div>`});
-html+=`</section><div class="nav-buttons"><button id="previous" ${pageIndex===0?'disabled':''}>← 前の手順</button><button id="next">${pageIndex===total-1?'確認完了':'完了して次へ →'}</button></div>`;out.innerHTML=html;
-out.querySelectorAll('img[data-photo]').forEach(im=>{im.onerror=()=>{let d=document.createElement('p');d.className='missing';d.textContent='写真が見つかりません：'+im.dataset.photo;im.replaceWith(d)};im.onclick=()=>{$('zoom').querySelector('img').src=im.src;$('zoom').style.display='flex'}});
-$('previous').onclick=()=>{if(pageIndex>0){pageIndex--;renderPage()}};
-$('next').onclick=()=>{donePages.add(pageIndex);if(pageIndex<total-1){pageIndex++;renderPage()}else{out.innerHTML='<section class="card finished-screen"><h2>✔ 梱包手順の確認完了</h2><p>すべての手順を確認しました。</p><p>※作業記録は保存されません。</p><button id="restart">最初の画面に戻る</button></section>';$('restart').onclick=()=>{out.innerHTML='';$('number').value='';window.scrollTo(0,0)}}};
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>梱包ナビ</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{--navy:#20447e;--blue:#1c5fc4;--green:#26964b;--yellow:#fff1bc;--red:#c62828;--bg:#f2f5fa}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:"Hiragino Sans","Meiryo",system-ui,sans-serif;color:#17233c}
+header{background:var(--navy);color:#fff;text-align:center;padding:14px;font-size:21px;font-weight:bold;position:sticky;top:0;z-index:10}
+main{max-width:1050px;margin:auto;padding:14px 20px 120px}
+button{cursor:pointer;border:0;border-radius:10px;font-weight:bold;font-family:inherit}
+.scan{width:100%;padding:16px;font-size:18px;background:var(--blue);color:#fff}
+.lookup{display:flex;gap:8px;margin-top:10px}
+.lookup input{flex:1;min-width:0;padding:13px;font-size:18px;border:1px solid #bbb;border-radius:8px}
+.lookup button{padding:0 22px;font-size:17px;background:var(--navy);color:#fff}
+#reader{margin-top:10px}
+.card{background:#fff;border:1px solid #dce4f0;border-radius:12px;padding:16px 20px;margin:12px 0}
+.error{color:var(--red);font-weight:bold}
+.tag{display:inline-block;background:#e5eeff;color:var(--navy);border-radius:6px;padding:4px 10px;margin:3px 6px 3px 0;font-size:15px;font-weight:bold}
+.tag.method{background:#fde8e8;color:var(--red);border:1px solid #f3b4b4}
+/* 進捗 */
+.progress{display:flex;align-items:center;gap:4px;overflow-x:auto;white-space:nowrap;margin:10px 0}
+.pi{border:1px solid #d0d9e8;border-radius:8px;padding:8px 11px;background:#fff;font-weight:bold;font-size:14px}
+.pi.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.pi.done{border-color:var(--green);color:#167a38}
+.arrow{color:#8b96a8;font-size:20px}
+/* 上部の指示書情報 */
+.summary{display:flex;flex-wrap:wrap;gap:6px 26px;align-items:center;font-size:16px}
+.summary b{color:#52647c;font-weight:normal;margin-right:6px}
+.summary .val{font-weight:bold;font-size:18px}
+/* 準備ページ */
+.prep-title{font-size:24px;font-weight:bold;margin:6px 0 2px}
+.prep-sub{color:#52647c;margin:0 0 6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.box h3{margin:0 0 10px;font-size:18px;display:flex;align-items:center;gap:8px}
+.box h3 .icon{font-size:22px}
+.casebox{border:3px solid var(--blue)}
+.case-list{display:flex;flex-wrap:wrap;gap:10px}
+.case{background:#eef4ff;border-radius:10px;padding:10px 16px;text-align:center;min-width:130px}
+.case .type{font-size:26px;font-weight:bold;color:var(--navy)}
+.case .cnt{font-size:20px;font-weight:bold;color:var(--red)}
+.case-none{color:#52647c;font-size:16px}
+.warnbox{border:3px solid #e0b100;background:#fffaf0}
+.warnbox ul{margin:0;padding-left:22px}
+.warnbox li{font-size:17px;line-height:1.6;margin:4px 0}
+.flow ol{margin:0;padding-left:0;list-style:none}
+.flow li{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed #e3e7ee;font-size:16px}
+.flow li:last-child{border-bottom:0}
+.flow .n{background:var(--blue);color:#fff;border-radius:50%;width:26px;height:26px;display:grid;place-items:center;flex-shrink:0;font-size:14px}
+.flow .br{color:#52647c;font-size:14px}
+/* 手順ページ */
+.step-title{font-size:24px;font-weight:bold;display:flex;gap:10px;align-items:center}
+.num{background:var(--blue);color:#fff;border-radius:50%;width:34px;height:34px;display:grid;place-items:center;flex-shrink:0}
+.sub{border-top:1px solid #e3e7ee;padding-top:12px;margin-top:12px}
+.sub:first-of-type{border-top:0}
+.branch{display:inline-block;background:var(--navy);color:#fff;border-radius:5px;padding:3px 10px;font-size:14px}
+.explain{font-size:19px;line-height:1.7;margin:10px 0;white-space:pre-wrap}
+.warn{background:var(--yellow);border-radius:8px;padding:10px 12px;font-size:17px;white-space:pre-wrap}
+.photo{display:block;max-width:440px;max-height:280px;width:auto;margin:12px auto 4px;border-radius:8px;object-fit:contain;cursor:zoom-in}
+.hint{text-align:center;font-size:13px;color:#52647c;margin:0}
+.missing{color:var(--red);font-size:13px}
+/* 下部ボタン */
+.nav{display:flex;gap:14px;position:sticky;bottom:0;background:var(--bg);padding:14px 0}
+.nav button{flex:1;padding:18px;font-size:19px;color:#fff;background:var(--green)}
+.nav button.back{background:#5a6d86}
+.nav button:disabled{opacity:.4}
+.finish{text-align:center;padding:40px}
+.finish button{background:var(--blue);color:#fff;padding:14px 30px;font-size:17px}
+#zoom{position:fixed;inset:0;background:#000d;display:none;align-items:center;justify-content:center;z-index:30}
+#zoom img{max-width:95%;max-height:94%}
+@media(max-width:700px){
+ main{padding:10px 10px 100px}.grid{grid-template-columns:1fr}
+ .step-title,.prep-title{font-size:20px}.explain{font-size:17px}
+ .photo{max-width:100%;max-height:220px}.nav button{font-size:16px;padding:15px 6px}
+ .case .type{font-size:22px}
 }
-$('lookup').onclick=()=>show($('number').value);$('number').onkeydown=e=>{if(e.key==='Enter')show(e.target.value)};$('zoom').onclick=()=>$('zoom').style.display='none';$('scan').onclick=async()=>{if(scanner){await scanner.stop().catch(()=>{});scanner=null;$('reader').innerHTML='';return}if(typeof Html5Qrcode==='undefined'){alert('読み取り機能を読み込めません。通信を確認してください。');return}scanner=new Html5Qrcode('reader');try{await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:280,height:120}},async text=>{await scanner.stop();scanner=null;$('reader').innerHTML='';$('number').value=text;show(text)})}catch(e){scanner=null;alert('カメラを起動できません。カメラの許可を確認してください。')}};init();
-</script></body></html>
+</style>
+</head>
+<body>
+<header>梱包ナビ</header>
+<main>
+  <div id="top">
+    <button class="scan" id="scan">▥ 出荷指示書を読み取る</button>
+    <div id="reader"></div>
+    <div class="lookup">
+      <input id="number" inputmode="numeric" placeholder="指示書番号を入力">
+      <button id="lookup">表示</button>
+    </div>
+  </div>
+  <div id="result"></div>
+</main>
+<div id="zoom"><img alt="拡大写真"></div>
+<script>
+// ===== Googleスプレッドシート（ウェブに公開したCSV）のURL =====
+const ORDERS_CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=0&single=true&output=csv";
+const STEPS_CSV_URL ="https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=300963233&single=true&output=csv";
+const SHORT={1:"確認",2:"ラベル",3:"ケース",4:"QR照合",5:"緩衝材"};
+
+let orders=[],steps=[],loaded=false,scanner=null;
+let order=null,values=[],pages=[],idx=0,done=new Set();
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,"");const rows=[];let row=[],v="",q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){if(c=='"'){if(text[i+1]=='"'){v+='"';i++}else q=false}else v+=c}
+    else if(c=='"')q=true;else if(c==','){row.push(v);v=""}
+    else if(c=='\n'){row.push(v);rows.push(row);row=[];v=""}else if(c!='\r')v+=c}
+  if(v||row.length){row.push(v);rows.push(row)}
+  const head=(rows.shift()||[]).map(h=>h.trim());
+  return rows.filter(r=>r.some(x=>x.trim())).map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
+}
+async function load(url){const r=await fetch(url+"&_="+Date.now(),{cache:"no-store"});if(!r.ok)throw Error(r.status);return parseCSV(await r.text())}
+async function init(){
+  try{[orders,steps]=await Promise.all([load(ORDERS_CSV_URL),load(STEPS_CSV_URL)]);loaded=true}
+  catch(e){$("result").innerHTML='<p class="error">データを読み込めませんでした。通信状態を確認してください。</p>'}
+}
+const tokens=s=>String(s||"").split(/[・\n、]/).map(x=>x.trim()).filter(Boolean);
+// 条件：共通／「A」／「A／B」(どれか)／「A・B」(すべて)／「○○以外」
+function cond(text){text=String(text||"").trim();if(!text||text==="共通")return true;if(text==="該当なし")return false;
+  return text.split(/[・＋+]/).every(p=>p.split(/[／\/]/).some(t=>{t=t.trim();return t.endsWith("以外")?!values.includes(t.slice(0,-2)):values.includes(t)}))}
+function choose(group){
+  let rows=group.filter(r=>r["条件"]!=="該当なし"&&cond(r["条件"]));
+  if(!rows.some(r=>r["条件"]&&r["条件"]!=="共通"))rows.push(...group.filter(r=>r["条件"]==="該当なし"));
+  const all=rows.filter(r=>(r["表示形式"]||"全表示")!=="優先"),pri=rows.filter(r=>r["表示形式"]==="優先");
+  if(pri.length){const m=Math.max(...pri.map(r=>+r["優先度"]||0));all.push(...pri.filter(r=>(+r["優先度"]||0)===m))}
+  return all;
+}
+function imgName(r){let s=(r["画像"]||"").trim();if(!s)return"";if(/^https?:/i.test(s))return s;
+  s=s.replace(/\\/g,"/").split("/").pop().trim();return s.replace(/\.(jpe?g|png|gif|webp)$/i,m=>m.toLowerCase())}
+// 「G-7×47枚、G-8×47枚」→[{type,count}]
+function cases(s){return String(s||"").split(/[、,\n]/).map(x=>x.trim()).filter(Boolean).map(x=>{
+  const m=x.match(/^(.+?)\s*[×xX＊*]\s*(\d+)\s*枚?$/);return m?{type:m[1].trim(),count:m[2]+"枚"}:{type:x,count:""}})}
+
+function show(input){
+  const n=String(input||"").replace(/\D/g,"");
+  if(!loaded){$("result").innerHTML='<p class="error">データ読み込み中です。少し待ってから再度お試しください。</p>';return}
+  order=orders.find(r=>String(r["出荷指示番号"]||"").replace(/\D/g,"")===n);
+  if(!order){$("result").innerHTML=`<p class="error">指示書番号「${esc(n)}」が見つかりません。番号を確認し、分からない場合は責任者に確認してください。</p><small>（指示書 ${orders.length}件／手順 ${steps.length}件 読み込み済み）</small>`;return}
+  order._no=n;values=tokens(order["梱包方法"]);
+  const g={};steps.forEach(r=>(g[r["手順番号"]]??=[]).push(r));
+  pages=Object.keys(g).sort((a,b)=>a-b).map(k=>({no:k,rows:choose(g[k])})).filter(p=>p.rows.length);
+  idx=-1;done=new Set();$("top").style.display="none";render();
+}
+
+function header(){
+  const prog=[`<span class="pi ${idx===-1?"active":""} ${done.has(-1)?"done":""}">0 準備</span>`]
+    .concat(pages.map((p,i)=>`<span class="pi ${i===idx?"active":""} ${done.has(i)?"done":""}">${esc(p.no)} ${esc(SHORT[p.no]||p.rows[0]["手順名"])}</span>`))
+    .join('<span class="arrow">›</span>');
+  return `<div class="card summary">
+    <span><b>出荷指示番号</b><span class="val">${esc(order._no)}</span></span>
+    ${order["注文主名"]?`<span><b>注文主</b><span class="val">${esc(order["注文主名"])}</span></span>`:""}
+    <span><b>数量</b><span class="val">${esc(order["受注数"]||"")}</span></span>
+  </div><nav class="progress">${prog}</nav>`;
+}
+
+function prepPage(){
+  const cs=cases(order["ケース必要枚数"]);
+  const notes=[...new Set(pages.flatMap(p=>p.rows.map(r=>r["注意"]).filter(Boolean)))];
+  return header()+`
+  <p class="prep-title">作業前の準備・確認</p>
+  <p class="prep-sub">作業を始める前に、必要な資材と注意事項を確認してください。</p>
+  <div class="grid">
+    <section class="card box casebox">
+      <h3><span class="icon">📦</span>必要なケース</h3>
+      ${cs.length?`<div class="case-list">${cs.map(c=>`<div class="case"><div class="type">${esc(c.type)}</div><div class="cnt">${esc(c.count)}</div></div>`).join("")}</div>`
+        :`<p class="case-none">指定なし（標準品）</p>`}
+    </section>
+    <section class="card box">
+      <h3><span class="icon">🏷️</span>梱包方法の指定</h3>
+      ${values.length?values.map(v=>`<span class="tag method">${esc(v)}</span>`).join(""):`<p class="case-none">指定なし</p>`}
+    </section>
+    <section class="card box warnbox">
+      <h3><span class="icon">⚠️</span>注意事項</h3>
+      ${notes.length?`<ul>${notes.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:`<p class="case-none">特になし</p>`}
+    </section>
+    <section class="card box flow">
+      <h3><span class="icon">📋</span>今回の作業の流れ</h3>
+      <ol>${pages.map(p=>{const br=p.rows.map(r=>r["分岐"]).filter(b=>b&&b!=="共通");
+        return `<li><span class="n">${esc(p.no)}</span><div>${esc(p.rows[0]["手順名"])}${br.length?`<div class="br">${br.map(esc).join("／")}</div>`:""}</div></li>`}).join("")}</ol>
+    </section>
+  </div>
+  <div class="nav"><button class="back" id="prev">← 番号入力に戻る</button><button id="next">準備OK　手順1へ →</button></div>`;
+}
+
+function stepPage(){
+  const p=pages[idx],last=idx===pages.length-1;
+  let h=header()+`<section class="card"><div class="step-title"><span class="num">${esc(p.no)}</span>手順 ${idx+1}／${pages.length}　${esc(p.rows[0]["手順名"])}</div>`;
+  p.rows.forEach(r=>{const im=imgName(r);
+    h+=`<div class="sub">${r["分岐"]&&r["分岐"]!=="共通"?`<span class="branch">${esc(r["分岐"])}</span>`:""}
+      <div class="explain">${esc(r["説明"])}</div>
+      ${r["注意"]?`<div class="warn">⚠ ${esc(r["注意"])}</div>`:""}
+      ${im?`<img class="photo" src="${esc(im)}" data-name="${esc(im)}" alt="手順写真"><p class="hint">写真をタップして拡大</p>`:""}</div>`});
+  return h+`</section><div class="nav"><button class="back" id="prev">← 前の手順</button><button id="next">${last?"✔ 確認完了":"完了して次へ →"}</button></div>`;
+}
+
+function render(){
+  const out=$("result");out.innerHTML=idx===-1?prepPage():stepPage();window.scrollTo(0,0);
+  out.querySelectorAll("img.photo").forEach(im=>{
+    im.onerror=()=>{const d=document.createElement("p");d.className="missing";d.textContent="写真が見つかりません："+im.dataset.name;im.nextElementSibling?.remove();im.replaceWith(d)};
+    im.onclick=()=>{$("zoom").querySelector("img").src=im.src;$("zoom").style.display="flex"}});
+  $("prev").onclick=()=>{if(idx===-1){reset()}else{idx--;render()}};
+  $("next").onclick=()=>{done.add(idx);
+    if(idx<pages.length-1){idx++;render()}
+    else{out.innerHTML=`<section class="card finish"><h2>✔ 梱包手順の確認完了</h2><p>すべての手順を確認しました。</p><p style="color:#52647c;font-size:14px">※作業記録は保存されません。</p><button id="restart">次の指示書を読み取る</button></section>`;$("restart").onclick=reset}};
+}
+function reset(){$("result").innerHTML="";$("number").value="";$("top").style.display="";order=null;window.scrollTo(0,0)}
+
+$("lookup").onclick=()=>show($("number").value);
+$("number").onkeydown=e=>{if(e.key==="Enter")show(e.target.value)};
+$("zoom").onclick=()=>$("zoom").style.display="none";
+$("scan").onclick=async()=>{
+  if(scanner){await scanner.stop().catch(()=>{});scanner=null;$("reader").innerHTML="";return}
+  if(typeof Html5Qrcode==="undefined"){alert("読み取り機能を読み込めません。通信を確認してください。");return}
+  scanner=new Html5Qrcode("reader");
+  try{await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:120}},async t=>{
+    await scanner.stop();scanner=null;$("reader").innerHTML="";$("number").value=t;show(t)})}
+  catch(e){scanner=null;alert("カメラを起動できません。カメラの許可を確認してください。")}
+};
+init();
+</script>
+</body>
+</html>
