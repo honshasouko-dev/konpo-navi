@@ -57,19 +57,35 @@ button{cursor:pointer;border:0;border-radius:10px;font-weight:bold;font-family:i
 .photo{display:block;max-width:440px;max-height:280px;width:auto;margin:12px auto 4px;border-radius:8px;object-fit:contain;cursor:zoom-in}
 .hint{text-align:center;font-size:13px;color:#52647c;margin:0}
 .missing{color:var(--red);font-size:13px}
+.wbar{display:flex;align-items:center;gap:8px;font-size:17px;margin-bottom:10px}
+.wbar .reload{margin-left:8px}
+.pick-title{font-size:22px;margin:4px 0 14px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tab{background:#fff;border:2px solid #b9c7dc;color:var(--navy);padding:10px 16px;font-size:17px;min-width:64px}
+.tab.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.tabs.big .tab{flex:1 1 150px;padding:22px 10px;font-size:22px}
+.lh{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.line{border:2px solid #dce4f0;border-radius:10px;margin:8px 0;padding:6px}
+.line.on{border-color:var(--blue);background:#f2f7ff}
+.line.fin{opacity:.55}
+.lbtn{width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;background:none;color:#17233c;text-align:left;padding:8px;font-size:17px}
+.lno{font-size:21px;font-weight:bold;min-width:90px}
+.lbtn .busy{font-size:14px;font-weight:bold}
+.tabs.qty{padding:4px 8px 8px}
+.selsum{font-size:17px;margin:10px 0 0}
+.sleeve{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#e8f1ff;border:3px solid var(--blue);border-radius:10px;padding:12px 16px;margin:12px 0}
+.sl-h{font-size:18px;font-weight:bold;color:var(--navy)}
+.sl-v{font-size:28px;font-weight:bold;color:var(--blue)}
 .chk{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:6px 0;border:2px solid #e0a800;border-radius:8px;background:#fff;font-size:17px;line-height:1.5;cursor:pointer}
 .chk input{width:28px;height:28px;flex-shrink:0;accent-color:var(--green)}
 .chk.on{border-color:var(--green);background:#e8f5e9}
 .warn-h{font-weight:bold;margin-bottom:4px}
-.workbox .f{display:block;font-size:15px;color:#52647c;margin:6px 0}
-.workbox .f input{display:block;width:100%;padding:11px;font-size:18px;border:1px solid #bbb;border-radius:8px;margin-top:3px}
-.workbox .f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.reload{margin-left:auto;background:#e5eeff;color:var(--navy);padding:5px 12px;font-size:14px}
-.works{margin:4px 0;padding-left:20px;font-size:15px;line-height:1.7}
-.ok{color:var(--green)}.busy{color:#d07a00}
+.warn{white-space:normal}
+.reload{background:#e5eeff;color:var(--navy);padding:6px 12px;font-size:14px}
+.lh .reload{margin-left:auto}
+.ok{color:var(--green);font-weight:bold}.busy{color:#d07a00}
 .need{color:var(--red);font-weight:bold;text-align:center;margin:8px 0 0;min-height:1em}
 .res-sub{font-size:18px}.per{font-size:22px}.per b{font-size:44px;color:var(--blue)}
-.warn{white-space:normal}
 /* 下部ボタン */
 .nav{display:flex;gap:14px;position:sticky;bottom:0;background:var(--bg);padding:14px 0}
 .nav button{flex:1;padding:18px;font-size:19px;color:#fff;background:var(--green)}
@@ -90,6 +106,7 @@ button{cursor:pointer;border:0;border-radius:10px;font-weight:bold;font-family:i
 <body>
 <header>梱包ナビ</header>
 <main>
+  <div class="wbar">👷 担当：<b id="wname"></b><button class="reload" id="wchange">変更</button></div>
   <div id="top">
     <button class="scan" id="scan">▥ 出荷指示書を読み取る</button>
     <div id="reader"></div>
@@ -105,6 +122,11 @@ button{cursor:pointer;border:0;border-radius:10px;font-weight:bold;font-family:i
 // ===== Googleスプレッドシート（ウェブに公開したCSV）のURL =====
 const ORDERS_CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=0&single=true&output=csv";
 const STEPS_CSV_URL ="https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=300963233&single=true&output=csv";
+const MEMBERS_CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=934164460&single=true&output=csv"; // 梱包担当者タブ
+const LINES_CSV_URL  ="https://docs.google.com/spreadsheets/d/e/2PACX-1vS-x0hZp_eDL4O40nNsJxQac-69H3PUDNxphv-xR5bT1uG4TaGIg6Db_tXqRSNaA-5zSgeqDq3oXUDW/pub?gid=262134046&single=true&output=csv"; // データタブ
+// ===== 作業記録用 Apps Script のウェブアプリ URL =====
+const GAS_URL="https://script.google.com/macros/s/AKfycbzY7nZM37Rv0ZC1eQMjneANP7wcMv0h7-T8wGKfJzYZjPQIc-_Ou3JmSg0p8xiykoY9/exec";
+let members=[],lineRows=[];
 const SHORT={1:"確認",2:"ラベル",3:"ケース",4:"QR照合",5:"緩衝材"};
 
 let orders=[],steps=[],loaded=false,scanner=null;
@@ -123,8 +145,25 @@ function parseCSV(text){
   return rows.filter(r=>r.some(x=>x.trim())).map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]||"").trim()])));
 }
 async function load(url){const r=await fetch(url+"&_="+Date.now(),{cache:"no-store"});if(!r.ok)throw Error(r.status);return parseCSV(await r.text())}
+function csvRows(text){
+  text=text.replace(/^\uFEFF/,"");const rows=[];let row=[],v="",q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){if(c=='"'){if(text[i+1]=='"'){v+='"';i++}else q=false}else v+=c}
+    else if(c=='"')q=true;else if(c==','){row.push(v);v=""}
+    else if(c=='\n'){row.push(v);rows.push(row);row=[];v=""}else if(c!='\r')v+=c}
+  if(v||row.length){row.push(v);rows.push(row)}return rows}
+async function loadText(url){const r=await fetch(url+"&_="+Date.now(),{cache:"no-store"});if(!r.ok)throw Error(r.status);return r.text()}
+async function loadMembers(){try{members=parseCSV(await loadText(MEMBERS_CSV_URL)).map(r=>r["氏名"]).filter(Boolean)}catch(e){members=[]}}
+// データタブ：列名で探し、見つからなければ B列・BA列・BE列を使う
+async function loadLines(){try{
+  const rows=csvRows(await loadText(LINES_CSV_URL)),h=(rows.shift()||[]).map(x=>x.trim());
+  const col=(name,def)=>{const i=h.indexOf(name);return i>=0?i:def};
+  const cNo=col("出荷指示番号",1),cQty=col("受注数",52),cRow=col("行番",56);
+  lineRows=rows.map(r=>({no:String(r[cNo]||"").replace(/\D/g,""),qty:String(r[cQty]||"").replace(/[^\d.]/g,""),row:String(r[cRow]||"").trim()}))
+    .filter(r=>r.no&&r.row)}catch(e){lineRows=[]}}
 async function init(){
-  try{[orders,steps]=await Promise.all([load(ORDERS_CSV_URL),load(STEPS_CSV_URL)]);loaded=true}
+  await loadMembers();showWorker();
+  try{[orders,steps]=await Promise.all([load(ORDERS_CSV_URL),load(STEPS_CSV_URL),loadLines()]);loaded=true}
   catch(e){$("result").innerHTML='<p class="error">データを読み込めませんでした。通信状態を確認してください。</p>'}
 }
 const tokens=s=>String(s||"").split(/[・\n、]/).map(x=>x.trim()).filter(Boolean);
@@ -152,6 +191,7 @@ function show(input){
   order._no=n;values=tokens(order["梱包方法"]);
   const g={};steps.forEach(r=>(g[r["手順番号"]]??=[]).push(r));
   pages=Object.keys(g).sort((a,b)=>a-b).map(k=>({no:k,rows:choose(g[k])})).filter(p=>p.rows.length);
+  lines=linesOf(n);sel={};
   idx=-1;done=new Set();checked=new Set();work=null;shared=null;$("top").style.display="none";render();refreshShared();
 }
 
@@ -163,16 +203,65 @@ function header(){
     <span><b>出荷指示番号</b><span class="val">${esc(order._no)}</span></span>
     ${order["注文主名"]?`<span><b>注文主</b><span class="val">${esc(order["注文主名"])}</span></span>`:""}
     <span><b>数量</b><span class="val">${esc(order["受注数"]||"")}</span></span>
+    <span><b>担当</b><span class="val">${esc(worker)}</span></span>
   </div><nav class="progress">${prog}</nav>`;
 }
 
-// ===== 作業記録用 Apps Scriptのウェブアプリ URL（梱包進捗スプレッドシート）=====
-const GAS_URL="https://script.google.com/macros/s/AKfycbzY7nZM37Rv0ZC1eQMjneANP7wcMv0h7-T8wGKfJzYZjPQIc-_Ou3JmSg0p8xiykoY9/exec";
-let checked=new Set(),work=null,shared=null;
+// ===== 担当者（URLを開いたときに1回だけ選択）=====
+let worker=localStorage.getItem("worker")||"";
+function showWorker(){
+  $("wname").textContent=worker||"未選択";
+  $("top").style.display=worker?"":"none";
+  if(worker)return;
+  $("result").innerHTML=`<section class="card"><h2 class="pick-title">👷 担当者を選んでください</h2>
+    ${members.length?`<div class="tabs big">${members.map(m=>`<button class="tab" data-m="${esc(m)}">${esc(m)}</button>`).join("")}</div>`
+      :`<p class="error">担当者名簿を読み込めませんでした。</p>`}</section>`;
+  $("result").querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{worker=b.dataset.m;localStorage.setItem("worker",worker);$("result").innerHTML="";showWorker()});
+}
+function changeWorker(){if(work){alert("作業中は担当者を変更できません。");return}
+  worker="";localStorage.removeItem("worker");order=null;showWorker()}
 
+// ===== 行番（データタブ：B 出荷指示番号／BA 受注数／BE 行番）=====
+function linesOf(n){
+  const m=new Map();
+  lineRows.filter(r=>r.no===n).forEach(r=>{const q=+r.qty||0;if(!m.has(r.row)||m.get(r.row)<q)m.set(r.row,q)});
+  const a=[...m].map(([row,qty])=>({row,qty})).sort((x,y)=>String(x.row).localeCompare(String(y.row),"ja",{numeric:true}));
+  return a.length?a:[{row:"-",qty:+order["受注数"]||1}];
+}
+// 行番ごとの完了台数・作業中の人
+function lineState(row){
+  const ws=(shared?.works||[]).filter(w=>String(w.row)===String(row));
+  return{done:ws.filter(w=>w.state==="完了").reduce((a,w)=>a+(+w.qty||0),0),
+         busy:ws.filter(w=>w.state==="作業中").map(w=>`${w.worker}（${w.qty}台）`)};
+}
+function linesHtml(){
+  return lines.map(l=>{const s=lineState(l.row),rest=Math.max(l.qty-s.done,0),on=sel[l.row]!=null,fin=rest===0;
+    return `<div class="line ${on?"on":""} ${fin?"fin":""}">
+      <button class="lbtn" data-row="${esc(l.row)}" ${fin||work?"disabled":""}>
+        <span class="lno">${on?"☑":"☐"} ${esc(l.row)}</span>
+        <span class="lqty">完了 <b>${s.done}</b> / ${l.qty}台</span>
+        ${fin?`<span class="ok">✔ 完了</span>`:""}
+        ${s.busy.length?`<span class="busy">作業中：${s.busy.map(esc).join("、")}</span>`:""}
+      </button>
+      ${on?`<div class="tabs qty">${Array.from({length:rest},(_,i)=>i+1).map(q=>`<button class="tab ${sel[l.row]===q?"on":""}" data-row="${esc(l.row)}" data-q="${q}" ${work?"disabled":""}>${q}台</button>`).join("")}</div>`:""}
+    </div>`}).join("");
+}
+function bindLines(){
+  $("result").querySelectorAll(".lbtn").forEach(b=>b.onclick=()=>{const r=b.dataset.row,l=lines.find(x=>String(x.row)===r);
+    if(sel[r]!=null)delete sel[r];else{const s=lineState(r);
+      if(s.busy.length&&!confirm(`${r}行目は ${s.busy.join("、")} が作業中です。選択しますか？`))return;
+      sel[r]=Math.max(l.qty-s.done,0)}
+    redrawLines()});
+  $("result").querySelectorAll(".qty .tab").forEach(b=>b.onclick=()=>{sel[b.dataset.row]=+b.dataset.q;redrawLines()});
+}
+function redrawLines(){const el=$("lines");if(!el)return;el.innerHTML=linesHtml();bindLines();
+  const st=shared&&!shared.error?shared:null,tot=Object.values(sel).reduce((a,b)=>a+b,0);
+  $("selsum").innerHTML=`選択中：<b>${Object.keys(sel).length}</b>行　合計 <b>${tot}</b>台`+(st?`　／　指示書の状態：<b class="${st.state==="梱包完了"?"ok":"busy"}">${esc(st.state)}</b>`:"");
+  updateNext()}
+
+let checked=new Set(),work=null,shared=null,lines=[],sel={};
 const noteItems=s=>String(s||"").split(/\n|・/).map(x=>x.trim()).filter(Boolean);
 function checkList(items,key){
-  if(!items.length)return `<p class="case-none">特になし</p>`;
   return items.map((t,i)=>{const id=key+":"+i,on=checked.has(id);
     return `<label class="chk ${on?"on":""}"><input type="checkbox" data-id="${esc(id)}" ${on?"checked":""}><span>${esc(t)}</span></label>`}).join("");
 }
@@ -180,27 +269,16 @@ function allChecked(){return [...$("result").querySelectorAll(".chk input")].eve
 
 async function gasGet(no){const r=await fetch(`${GAS_URL}?no=${encodeURIComponent(no)}&_=${Date.now()}`);return r.json()}
 async function gasPost(body){const r=await fetch(GAS_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)});return r.json()}
-function statusHtml(st){
-  if(!GAS_URL)return `<p class="case-none">※記録先が未設定のため、作業記録は保存されません。</p>`;
-  if(!st)return `<p class="case-none">状況を確認中…</p>`;
-  if(st.error)return `<p class="error">状況を取得できませんでした。</p>`;
-  const list=(st.works||[]).map(w=>`<li>${esc(w.row)}行目 × ${esc(w.qty)}台　${esc(w.worker)}　<b class="${w.state==="完了"?"ok":"busy"}">${esc(w.state)}</b></li>`).join("");
-  return `<p>状態：<b class="${st.state==="梱包完了"?"ok":"busy"}">${esc(st.state)}</b>　完了 <b>${esc(st.done||0)}</b> / ${esc(st.total||order["受注数"]||"-")}台</p>
-    ${list?`<ul class="works">${list}</ul>`:`<p class="case-none">まだ誰も作業していません</p>`}`;
-}
 async function refreshShared(){
   if(!GAS_URL||!order)return;
   try{shared=await gasGet(order._no)}catch(e){shared={error:true}}
-  const el=$("shared");if(el)el.innerHTML=statusHtml(shared);
+  if(idx===-1)redrawLines();
 }
 
 function prepPage(){
   const cs=cases(order["ケース必要枚数"]);
-  const notes=[...new Set(pages.flatMap(p=>p.rows.flatMap(r=>noteItems(r["注意"]))))];
-  const w=work||{worker:localStorage.getItem("worker")||"",row:"",qty:order["受注数"]||""};
   return header()+`
   <p class="prep-title">作業前の準備・確認</p>
-  <p class="prep-sub">必要な資材を確認し、注意事項をすべてタップしてチェックしてください。</p>
   <div class="grid">
     <section class="card box casebox">
       <h3><span class="icon">📦</span>必要なケース</h3>
@@ -211,21 +289,14 @@ function prepPage(){
       <h3><span class="icon">🏷️</span>梱包方法の指定</h3>
       ${values.length?values.map(v=>`<span class="tag method">${esc(v)}</span>`).join(""):`<p class="case-none">指定なし</p>`}
     </section>
-    <section class="card box warnbox">
-      <h3><span class="icon">⚠️</span>注意事項（タップしてチェック）</h3>
-      ${checkList(notes,"prep")}
-    </section>
-    <section class="card box workbox">
-      <h3><span class="icon">👷</span>担当分の入力</h3>
-      <label class="f">担当者名<input id="w-worker" value="${esc(w.worker)}" ${work?"disabled":""}></label>
-      <div class="f2">
-        <label class="f">何行目<input id="w-row" inputmode="numeric" value="${esc(w.row)}" ${work?"disabled":""}></label>
-        <label class="f">台数<input id="w-qty" inputmode="numeric" value="${esc(w.qty)}" ${work?"disabled":""}></label>
-      </div>
-      <h3 style="margin-top:12px"><span class="icon">👥</span>この指示書の状況 <button class="reload" id="reload">更新</button></h3>
-      <div id="shared">${statusHtml(shared)}</div>
-    </section>
   </div>
+  <section class="card">
+    <h3 class="lh"><span class="icon">🔢</span>担当する行番と台数を選択（複数選択できます）<button class="reload" id="reload">↻ 最新の状況</button></h3>
+    ${GAS_URL?"":`<p class="case-none">※記録先が未設定のため、作業記録は保存されません。</p>`}
+    ${shared?.error?`<p class="error">他の人の作業状況を取得できませんでした。</p>`:""}
+    <div id="lines">${linesHtml()}</div>
+    <p class="selsum" id="selsum"></p>
+  </section>
   <p class="need" id="need"></p>
   <div class="nav"><button class="back" id="prev">← 番号入力に戻る</button><button id="next">作業開始　手順1へ →</button></div>`;
 }
@@ -233,6 +304,9 @@ function prepPage(){
 function stepPage(){
   const p=pages[idx],last=idx===pages.length-1;
   let h=header()+`<section class="card"><div class="step-title"><span class="num">${esc(p.no)}</span>手順 ${idx+1}／${pages.length}　${esc(p.rows[0]["手順名"])}</div>`;
+  // スリーブ必要数は手順2のときだけ表示
+  const sv=String(order["スリーブ必要数"]||"").trim();
+  if(String(p.no)==="2"&&sv)h+=`<div class="sleeve"><span class="sl-h">🧤 スリーブ必要数</span><span class="sl-v">${esc(sv)}</span></div>`;
   p.rows.forEach((r,ri)=>{const im=imgName(r),ns=noteItems(r["注意"]);
     h+=`<div class="sub">${r["分岐"]&&r["分岐"]!=="共通"?`<span class="branch">${esc(r["分岐"])}</span>`:""}
       <div class="explain">${esc(r["説明"])}</div>
@@ -244,19 +318,17 @@ function stepPage(){
 function updateNext(){
   const nx=$("next");if(!nx)return;
   let msg="";
-  if(!allChecked())msg="注意事項をすべてチェックすると次へ進めます。";
-  else if(idx===-1&&!work&&!($("w-worker").value.trim()&&$("w-row").value.trim()&&+$("w-qty").value>0))msg="担当者名・何行目・台数を入力してください。";
+  if(idx===-1&&!work&&!Object.values(sel).some(q=>q>0))msg="担当する行番と台数を選択してください。";
+  else if(!allChecked())msg="注意事項をすべてチェックすると次へ進めます。";
   nx.disabled=!!msg;$("need").textContent=msg;
 }
 
 async function startWork(){
-  const worker=$("w-worker").value.trim(),row=$("w-row").value.replace(/\D/g,""),qty=$("w-qty").value.replace(/\D/g,"");
-  localStorage.setItem("worker",worker);
-  const busy=(shared?.works||[]).find(x=>String(x.row)===row&&x.state==="作業中");
-  if(busy&&!confirm(`${row}行目は ${busy.worker} さんが作業中です。このまま開始しますか？`))return false;
-  work={worker,row,qty,start:Date.now(),id:null};
+  const ls=Object.entries(sel).filter(([,q])=>q>0).map(([row,qty])=>({row,qty}));
+  const qty=ls.reduce((a,l)=>a+l.qty,0);
+  work={worker,lines:ls,qty,start:Date.now(),id:null};
   if(GAS_URL){
-    try{const r=await gasPost({action:"start",no:order._no,total:order["受注数"]||"",row,qty,worker});work.id=r.id}
+    try{const r=await gasPost({action:"start",no:order._no,total:order["受注数"]||"",lines:ls,worker});work.id=r.id}
     catch(e){alert("作業開始を記録できませんでした。通信状態を確認してください。（作業はこのまま続けられます）")}
   }
   return true;
@@ -265,14 +337,15 @@ async function startWork(){
 async function finishWork(){
   const out=$("result");
   out.innerHTML=`<section class="card finish"><h2>記録中…</h2></section>`;
-  let min=Math.round((Date.now()-work.start)/6000)/10,qty=+work.qty||1,st=null,saved=false;
+  let min=Math.round((Date.now()-work.start)/6000)/10,qty=work.qty||1,st=null,saved=false;
   if(GAS_URL&&work.id){
     try{const r=await gasPost({action:"finish",id:work.id});if(r.ok){min=r.minutes;st=r.status;saved=true}}catch(e){}
   }
   const per=Math.round(min/qty*10)/10;
   out.innerHTML=`<section class="card finish">
     <h2>✔ 梱包お疲れさまでした</h2>
-    <p class="res-sub">${esc(work.row)}行目　${esc(qty)}台　／　作業時間 ${esc(min)}分</p>
+    <p class="res-sub">${work.lines.map(l=>`${esc(l.row)}行目×${l.qty}台`).join("、")}</p>
+    <p class="res-sub">合計 ${esc(qty)}台　／　作業時間 ${esc(min)}分</p>
     <p class="per">1台あたり <b>${esc(per)}</b> 分</p>
     ${st?`<p>指示書の状態：<b class="${st.state==="梱包完了"?"ok":"busy"}">${esc(st.state)}</b>（完了 ${esc(st.done)} / ${esc(st.total)}台）</p>`:""}
     <p style="color:#52647c;font-size:14px">${saved?"※作業記録を保存しました。":"※作業記録は保存されていません。"}</p>
@@ -288,20 +361,21 @@ function render(){
   out.querySelectorAll(".chk input").forEach(b=>b.onchange=()=>{
     b.checked?checked.add(b.dataset.id):checked.delete(b.dataset.id);
     b.parentElement.classList.toggle("on",b.checked);updateNext()});
-  out.querySelectorAll("#w-worker,#w-row,#w-qty").forEach(i=>i.oninput=updateNext);
   if($("reload"))$("reload").onclick=refreshShared;
+  if(idx===-1)redrawLines();
   updateNext();
   $("prev").onclick=()=>{if(idx===-1){if(work&&!confirm("作業を中止して番号入力に戻りますか？"))return;reset()}else{idx--;render()}};
   $("next").onclick=async()=>{
     if($("next").disabled)return;
-    if(idx===-1&&!work){$("next").disabled=true;if(!await startWork()){updateNext();return}}
+    if(idx===-1&&!work){$("next").disabled=true;await startWork()}
     done.add(idx);
     if(idx<pages.length-1){idx++;render()}else finishWork()};
 }
-function reset(){$("result").innerHTML="";$("number").value="";$("top").style.display="";order=null;work=null;shared=null;checked=new Set();window.scrollTo(0,0)}
+function reset(){$("result").innerHTML="";$("number").value="";$("top").style.display="";order=null;work=null;shared=null;sel={};checked=new Set();window.scrollTo(0,0)}
 
 $("lookup").onclick=()=>show($("number").value);
 $("number").onkeydown=e=>{if(e.key==="Enter")show(e.target.value)};
+$("wchange").onclick=changeWorker;
 $("zoom").onclick=()=>$("zoom").style.display="none";
 $("scan").onclick=async()=>{
   if(scanner){await scanner.stop().catch(()=>{});scanner=null;$("reader").innerHTML="";return}
