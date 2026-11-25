@@ -46,11 +46,6 @@ button{cursor:pointer;border:0;border-radius:10px;font-weight:bold;font-family:i
 .warnbox{border:3px solid #e0b100;background:#fffaf0}
 .warnbox ul{margin:0;padding-left:22px}
 .warnbox li{font-size:17px;line-height:1.6;margin:4px 0}
-.flow ol{margin:0;padding-left:0;list-style:none}
-.flow li{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed #e3e7ee;font-size:16px}
-.flow li:last-child{border-bottom:0}
-.flow .n{background:var(--blue);color:#fff;border-radius:50%;width:26px;height:26px;display:grid;place-items:center;flex-shrink:0;font-size:14px}
-.flow .br{color:#52647c;font-size:14px}
 /* 手順ページ */
 .step-title{font-size:24px;font-weight:bold;display:flex;gap:10px;align-items:center}
 .num{background:var(--blue);color:#fff;border-radius:50%;width:34px;height:34px;display:grid;place-items:center;flex-shrink:0}
@@ -62,6 +57,19 @@ button{cursor:pointer;border:0;border-radius:10px;font-weight:bold;font-family:i
 .photo{display:block;max-width:440px;max-height:280px;width:auto;margin:12px auto 4px;border-radius:8px;object-fit:contain;cursor:zoom-in}
 .hint{text-align:center;font-size:13px;color:#52647c;margin:0}
 .missing{color:var(--red);font-size:13px}
+.chk{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:6px 0;border:2px solid #e0a800;border-radius:8px;background:#fff;font-size:17px;line-height:1.5;cursor:pointer}
+.chk input{width:28px;height:28px;flex-shrink:0;accent-color:var(--green)}
+.chk.on{border-color:var(--green);background:#e8f5e9}
+.warn-h{font-weight:bold;margin-bottom:4px}
+.workbox .f{display:block;font-size:15px;color:#52647c;margin:6px 0}
+.workbox .f input{display:block;width:100%;padding:11px;font-size:18px;border:1px solid #bbb;border-radius:8px;margin-top:3px}
+.workbox .f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.reload{margin-left:auto;background:#e5eeff;color:var(--navy);padding:5px 12px;font-size:14px}
+.works{margin:4px 0;padding-left:20px;font-size:15px;line-height:1.7}
+.ok{color:var(--green)}.busy{color:#d07a00}
+.need{color:var(--red);font-weight:bold;text-align:center;margin:8px 0 0;min-height:1em}
+.res-sub{font-size:18px}.per{font-size:22px}.per b{font-size:44px;color:var(--blue)}
+.warn{white-space:normal}
 /* 下部ボタン */
 .nav{display:flex;gap:14px;position:sticky;bottom:0;background:var(--bg);padding:14px 0}
 .nav button{flex:1;padding:18px;font-size:19px;color:#fff;background:var(--green)}
@@ -144,7 +152,7 @@ function show(input){
   order._no=n;values=tokens(order["梱包方法"]);
   const g={};steps.forEach(r=>(g[r["手順番号"]]??=[]).push(r));
   pages=Object.keys(g).sort((a,b)=>a-b).map(k=>({no:k,rows:choose(g[k])})).filter(p=>p.rows.length);
-  idx=-1;done=new Set();$("top").style.display="none";render();
+  idx=-1;done=new Set();checked=new Set();work=null;shared=null;$("top").style.display="none";render();refreshShared();
 }
 
 function header(){
@@ -158,12 +166,41 @@ function header(){
   </div><nav class="progress">${prog}</nav>`;
 }
 
+// ===== 作業記録用 Apps Scriptのウェブアプリ URL（梱包進捗スプレッドシート）=====
+const GAS_URL="https://script.google.com/macros/s/AKfycbzY7nZM37Rv0ZC1eQMjneANP7wcMv0h7-T8wGKfJzYZjPQIc-_Ou3JmSg0p8xiykoY9/exec";
+let checked=new Set(),work=null,shared=null;
+
+const noteItems=s=>String(s||"").split(/\n|・/).map(x=>x.trim()).filter(Boolean);
+function checkList(items,key){
+  if(!items.length)return `<p class="case-none">特になし</p>`;
+  return items.map((t,i)=>{const id=key+":"+i,on=checked.has(id);
+    return `<label class="chk ${on?"on":""}"><input type="checkbox" data-id="${esc(id)}" ${on?"checked":""}><span>${esc(t)}</span></label>`}).join("");
+}
+function allChecked(){return [...$("result").querySelectorAll(".chk input")].every(b=>b.checked)}
+
+async function gasGet(no){const r=await fetch(`${GAS_URL}?no=${encodeURIComponent(no)}&_=${Date.now()}`);return r.json()}
+async function gasPost(body){const r=await fetch(GAS_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)});return r.json()}
+function statusHtml(st){
+  if(!GAS_URL)return `<p class="case-none">※記録先が未設定のため、作業記録は保存されません。</p>`;
+  if(!st)return `<p class="case-none">状況を確認中…</p>`;
+  if(st.error)return `<p class="error">状況を取得できませんでした。</p>`;
+  const list=(st.works||[]).map(w=>`<li>${esc(w.row)}行目 × ${esc(w.qty)}台　${esc(w.worker)}　<b class="${w.state==="完了"?"ok":"busy"}">${esc(w.state)}</b></li>`).join("");
+  return `<p>状態：<b class="${st.state==="梱包完了"?"ok":"busy"}">${esc(st.state)}</b>　完了 <b>${esc(st.done||0)}</b> / ${esc(st.total||order["受注数"]||"-")}台</p>
+    ${list?`<ul class="works">${list}</ul>`:`<p class="case-none">まだ誰も作業していません</p>`}`;
+}
+async function refreshShared(){
+  if(!GAS_URL||!order)return;
+  try{shared=await gasGet(order._no)}catch(e){shared={error:true}}
+  const el=$("shared");if(el)el.innerHTML=statusHtml(shared);
+}
+
 function prepPage(){
   const cs=cases(order["ケース必要枚数"]);
-  const notes=[...new Set(pages.flatMap(p=>p.rows.map(r=>r["注意"]).filter(Boolean)))];
+  const notes=[...new Set(pages.flatMap(p=>p.rows.flatMap(r=>noteItems(r["注意"]))))];
+  const w=work||{worker:localStorage.getItem("worker")||"",row:"",qty:order["受注数"]||""};
   return header()+`
   <p class="prep-title">作業前の準備・確認</p>
-  <p class="prep-sub">作業を始める前に、必要な資材と注意事項を確認してください。</p>
+  <p class="prep-sub">必要な資材を確認し、注意事項をすべてタップしてチェックしてください。</p>
   <div class="grid">
     <section class="card box casebox">
       <h3><span class="icon">📦</span>必要なケース</h3>
@@ -175,27 +212,72 @@ function prepPage(){
       ${values.length?values.map(v=>`<span class="tag method">${esc(v)}</span>`).join(""):`<p class="case-none">指定なし</p>`}
     </section>
     <section class="card box warnbox">
-      <h3><span class="icon">⚠️</span>注意事項</h3>
-      ${notes.length?`<ul>${notes.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:`<p class="case-none">特になし</p>`}
+      <h3><span class="icon">⚠️</span>注意事項（タップしてチェック）</h3>
+      ${checkList(notes,"prep")}
     </section>
-    <section class="card box flow">
-      <h3><span class="icon">📋</span>今回の作業の流れ</h3>
-      <ol>${pages.map(p=>{const br=p.rows.map(r=>r["分岐"]).filter(b=>b&&b!=="共通");
-        return `<li><span class="n">${esc(p.no)}</span><div>${esc(p.rows[0]["手順名"])}${br.length?`<div class="br">${br.map(esc).join("／")}</div>`:""}</div></li>`}).join("")}</ol>
+    <section class="card box workbox">
+      <h3><span class="icon">👷</span>担当分の入力</h3>
+      <label class="f">担当者名<input id="w-worker" value="${esc(w.worker)}" ${work?"disabled":""}></label>
+      <div class="f2">
+        <label class="f">何行目<input id="w-row" inputmode="numeric" value="${esc(w.row)}" ${work?"disabled":""}></label>
+        <label class="f">台数<input id="w-qty" inputmode="numeric" value="${esc(w.qty)}" ${work?"disabled":""}></label>
+      </div>
+      <h3 style="margin-top:12px"><span class="icon">👥</span>この指示書の状況 <button class="reload" id="reload">更新</button></h3>
+      <div id="shared">${statusHtml(shared)}</div>
     </section>
   </div>
-  <div class="nav"><button class="back" id="prev">← 番号入力に戻る</button><button id="next">準備OK　手順1へ →</button></div>`;
+  <p class="need" id="need"></p>
+  <div class="nav"><button class="back" id="prev">← 番号入力に戻る</button><button id="next">作業開始　手順1へ →</button></div>`;
 }
 
 function stepPage(){
   const p=pages[idx],last=idx===pages.length-1;
   let h=header()+`<section class="card"><div class="step-title"><span class="num">${esc(p.no)}</span>手順 ${idx+1}／${pages.length}　${esc(p.rows[0]["手順名"])}</div>`;
-  p.rows.forEach(r=>{const im=imgName(r);
+  p.rows.forEach((r,ri)=>{const im=imgName(r),ns=noteItems(r["注意"]);
     h+=`<div class="sub">${r["分岐"]&&r["分岐"]!=="共通"?`<span class="branch">${esc(r["分岐"])}</span>`:""}
       <div class="explain">${esc(r["説明"])}</div>
-      ${r["注意"]?`<div class="warn">⚠ ${esc(r["注意"])}</div>`:""}
+      ${ns.length?`<div class="warn"><div class="warn-h">⚠ 注意（タップしてチェック）</div>${checkList(ns,"s"+idx+"-"+ri)}</div>`:""}
       ${im?`<img class="photo" src="${esc(im)}" data-name="${esc(im)}" alt="手順写真"><p class="hint">写真をタップして拡大</p>`:""}</div>`});
-  return h+`</section><div class="nav"><button class="back" id="prev">← 前の手順</button><button id="next">${last?"✔ 確認完了":"完了して次へ →"}</button></div>`;
+  return h+`</section><p class="need" id="need"></p><div class="nav"><button class="back" id="prev">← 前の手順</button><button id="next">${last?"✔ 梱包完了":"完了して次へ →"}</button></div>`;
+}
+
+function updateNext(){
+  const nx=$("next");if(!nx)return;
+  let msg="";
+  if(!allChecked())msg="注意事項をすべてチェックすると次へ進めます。";
+  else if(idx===-1&&!work&&!($("w-worker").value.trim()&&$("w-row").value.trim()&&+$("w-qty").value>0))msg="担当者名・何行目・台数を入力してください。";
+  nx.disabled=!!msg;$("need").textContent=msg;
+}
+
+async function startWork(){
+  const worker=$("w-worker").value.trim(),row=$("w-row").value.replace(/\D/g,""),qty=$("w-qty").value.replace(/\D/g,"");
+  localStorage.setItem("worker",worker);
+  const busy=(shared?.works||[]).find(x=>String(x.row)===row&&x.state==="作業中");
+  if(busy&&!confirm(`${row}行目は ${busy.worker} さんが作業中です。このまま開始しますか？`))return false;
+  work={worker,row,qty,start:Date.now(),id:null};
+  if(GAS_URL){
+    try{const r=await gasPost({action:"start",no:order._no,total:order["受注数"]||"",row,qty,worker});work.id=r.id}
+    catch(e){alert("作業開始を記録できませんでした。通信状態を確認してください。（作業はこのまま続けられます）")}
+  }
+  return true;
+}
+
+async function finishWork(){
+  const out=$("result");
+  out.innerHTML=`<section class="card finish"><h2>記録中…</h2></section>`;
+  let min=Math.round((Date.now()-work.start)/6000)/10,qty=+work.qty||1,st=null,saved=false;
+  if(GAS_URL&&work.id){
+    try{const r=await gasPost({action:"finish",id:work.id});if(r.ok){min=r.minutes;st=r.status;saved=true}}catch(e){}
+  }
+  const per=Math.round(min/qty*10)/10;
+  out.innerHTML=`<section class="card finish">
+    <h2>✔ 梱包お疲れさまでした</h2>
+    <p class="res-sub">${esc(work.row)}行目　${esc(qty)}台　／　作業時間 ${esc(min)}分</p>
+    <p class="per">1台あたり <b>${esc(per)}</b> 分</p>
+    ${st?`<p>指示書の状態：<b class="${st.state==="梱包完了"?"ok":"busy"}">${esc(st.state)}</b>（完了 ${esc(st.done)} / ${esc(st.total)}台）</p>`:""}
+    <p style="color:#52647c;font-size:14px">${saved?"※作業記録を保存しました。":"※作業記録は保存されていません。"}</p>
+    <button id="restart">次の指示書を読み取る</button></section>`;
+  $("restart").onclick=reset;work=null;
 }
 
 function render(){
@@ -203,12 +285,20 @@ function render(){
   out.querySelectorAll("img.photo").forEach(im=>{
     im.onerror=()=>{const d=document.createElement("p");d.className="missing";d.textContent="写真が見つかりません："+im.dataset.name;im.nextElementSibling?.remove();im.replaceWith(d)};
     im.onclick=()=>{$("zoom").querySelector("img").src=im.src;$("zoom").style.display="flex"}});
-  $("prev").onclick=()=>{if(idx===-1){reset()}else{idx--;render()}};
-  $("next").onclick=()=>{done.add(idx);
-    if(idx<pages.length-1){idx++;render()}
-    else{out.innerHTML=`<section class="card finish"><h2>✔ 梱包手順の確認完了</h2><p>すべての手順を確認しました。</p><p style="color:#52647c;font-size:14px">※作業記録は保存されません。</p><button id="restart">次の指示書を読み取る</button></section>`;$("restart").onclick=reset}};
+  out.querySelectorAll(".chk input").forEach(b=>b.onchange=()=>{
+    b.checked?checked.add(b.dataset.id):checked.delete(b.dataset.id);
+    b.parentElement.classList.toggle("on",b.checked);updateNext()});
+  out.querySelectorAll("#w-worker,#w-row,#w-qty").forEach(i=>i.oninput=updateNext);
+  if($("reload"))$("reload").onclick=refreshShared;
+  updateNext();
+  $("prev").onclick=()=>{if(idx===-1){if(work&&!confirm("作業を中止して番号入力に戻りますか？"))return;reset()}else{idx--;render()}};
+  $("next").onclick=async()=>{
+    if($("next").disabled)return;
+    if(idx===-1&&!work){$("next").disabled=true;if(!await startWork()){updateNext();return}}
+    done.add(idx);
+    if(idx<pages.length-1){idx++;render()}else finishWork()};
 }
-function reset(){$("result").innerHTML="";$("number").value="";$("top").style.display="";order=null;window.scrollTo(0,0)}
+function reset(){$("result").innerHTML="";$("number").value="";$("top").style.display="";order=null;work=null;shared=null;checked=new Set();window.scrollTo(0,0)}
 
 $("lookup").onclick=()=>show($("number").value);
 $("number").onkeydown=e=>{if(e.key==="Enter")show(e.target.value)};
