@@ -378,9 +378,17 @@ const BARCODE_LEN=10;     // 出荷指示番号の桁数
 const NEED_SAME=2;        // 同じ番号を何回続けて読んだら確定するか
 let lastCode="",sameCnt=0;
 const scanMsg=t=>$("scanmsg").textContent=t;
-function fmts(){const F=Html5QrcodeSupportedFormats;return[F.CODE_128]}
+function fmts(){const F=Html5QrcodeSupportedFormats;return[F.CODE_128,F.CODE_39,F.CODE_93,F.ITF,F.CODABAR]}
 // 数字だけ・指定桁数のときだけ有効（アルファベット混じりは誤読として捨てる）
-function validCode(t){t=String(t||"").trim();return new RegExp("^\\d{"+BARCODE_LEN+"}$").test(t)?t:null}
+// 読み取った文字から数字だけ取り出し、登録済みの出荷指示番号と照合する
+// （バーコードに英字や記号が含まれていても、番号部分が一致すれば有効）
+function validCode(t){const d=String(t||"").replace(/\D/g,"");if(!d)return null;
+  const nos=orders.map(r=>String(r["出荷指示番号"]||"").replace(/\D/g,"")).filter(Boolean);
+  if(!nos.length)return d.length>=BARCODE_LEN?d:null;
+  if(nos.includes(d))return d;
+  const hit=nos.filter(n=>n.length>=6&&d.includes(n)).sort((a,b)=>b.length-a.length)[0];
+  return hit||null}
+let lastRaw="";
 async function stopScan(){if(scanner){await scanner.stop().catch(()=>{});scanner.clear?.();scanner=null}
   $("reader").innerHTML="";$("scan").textContent="▥ 出荷指示書を読み取る";scanMsg("")}
 let accepting=false;
@@ -394,11 +402,11 @@ $("scan").onclick=async()=>{
   const cfg={fps:20,disableFlip:true,
     // 横長のバーコードに合わせて、画面幅の90%×高さ35%を読み取り範囲にする
     qrbox:(w,h)=>({width:Math.floor(w*0.9),height:Math.max(80,Math.floor(Math.min(h,w)*0.35))}),
-    videoConstraints:{facingMode:"environment",width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:"continuous"}]}};
+    videoConstraints:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}};
   try{
     await scanner.start({facingMode:"environment"},cfg,t=>{
       const c=validCode(t);
-      if(!c){scanMsg("読み取り直し中…（バーコードを枠に合わせてください）");return}
+      if(!c){lastRaw=t;scanMsg("該当する番号がありません（読み取り結果："+t+"）");return}
       if(c===lastCode)sameCnt++;else{lastCode=c;sameCnt=1}
       if(sameCnt>=NEED_SAME)accept(c);else scanMsg("確認中… "+c);
     },()=>{});
@@ -412,9 +420,9 @@ $("photoFile").onchange=async e=>{
   const f=e.target.files[0];if(!f)return;
   scanMsg("写真から読み取り中…");
   const tmp=new Html5Qrcode("reader",{formatsToSupport:fmts(),verbose:false});
-  try{const c=validCode(await tmp.scanFile(f,false));
+  try{const raw=await tmp.scanFile(f,false);const c=validCode(raw);
     if(c){scanMsg("");$("number").value=c;show(c)}
-    else scanMsg("番号を正しく読めませんでした。もう一度撮影するか、番号を入力してください。")}
+    else scanMsg("該当する番号がありません（読み取り結果："+raw+"）")}
   catch(err){scanMsg("バーコードが見つかりませんでした。バーコードを大きく、まっすぐ撮影してください。")}
   finally{tmp.clear?.()}
 };
