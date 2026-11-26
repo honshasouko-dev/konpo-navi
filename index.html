@@ -17,6 +17,10 @@ button{cursor:pointer;border:0;border-radius:10px;font-weight:bold;font-family:i
 .lookup input{flex:1;min-width:0;padding:13px;font-size:18px;border:1px solid #bbb;border-radius:8px}
 .lookup button{padding:0 22px;font-size:17px;background:var(--navy);color:#fff}
 #reader{margin-top:10px}
+.scanbtns{display:flex;gap:8px}
+.scanbtns .scan{flex:2}
+.scan.photo-btn{flex:1;background:#5a6d86}
+#scanmsg{text-align:center;font-weight:bold;color:var(--navy);margin:6px 0 0;min-height:1em}
 .card{background:#fff;border:1px solid #dce4f0;border-radius:12px;padding:16px 20px;margin:12px 0}
 .error{color:var(--red);font-weight:bold}
 .tag{display:inline-block;background:#e5eeff;color:var(--navy);border-radius:6px;padding:4px 10px;margin:3px 6px 3px 0;font-size:15px;font-weight:bold}
@@ -108,10 +112,15 @@ button{cursor:pointer;border:0;border-radius:10px;font-weight:bold;font-family:i
 <main>
   <div class="wbar">👷 担当：<b id="wname"></b><button class="reload" id="wchange">変更</button></div>
   <div id="top">
-    <button class="scan" id="scan">▥ 出荷指示書を読み取る</button>
+    <div class="scanbtns">
+      <button class="scan" id="scan">▥ 出荷指示書を読み取る</button>
+      <button class="scan photo-btn" id="photoScan">📷 写真で読む</button>
+    </div>
+    <input type="file" id="photoFile" accept="image/*" capture="environment" style="display:none">
+    <p id="scanmsg"></p>
     <div id="reader"></div>
     <div class="lookup">
-      <input id="number" inputmode="numeric" placeholder="指示書番号を入力">
+      <input id="number" inputmode="numeric" pattern="[0-9]*" maxlength="10" placeholder="指示書番号を入力">
       <button id="lookup">表示</button>
     </div>
   </div>
@@ -359,18 +368,55 @@ function render(){
     done.add(idx);
     if(idx<pages.length-1){idx++;render()}else finishWork()};
 }
-function reset(){$("result").innerHTML="";$("number").value="";$("top").style.display="";order=null;work=null;shared=null;sel={};checked=new Set();window.scrollTo(0,0)}
+function reset(){scanMsg("");$("result").innerHTML="";$("number").value="";$("top").style.display="";order=null;work=null;shared=null;sel={};checked=new Set();window.scrollTo(0,0)}
 $("lookup").onclick=()=>show($("number").value);
 $("number").onkeydown=e=>{if(e.key==="Enter")show(e.target.value)};
 $("wchange").onclick=changeWorker;
 $("zoom").onclick=()=>$("zoom").style.display="none";
+// ===== バーコード読み取り（iPad向けに改善）=====
+const BARCODE_LEN=10;     // 出荷指示番号の桁数
+const NEED_SAME=2;        // 同じ番号を何回続けて読んだら確定するか
+let lastCode="",sameCnt=0;
+const scanMsg=t=>$("scanmsg").textContent=t;
+function fmts(){const F=Html5QrcodeSupportedFormats;return[F.CODE_128]}
+// 数字だけ・指定桁数のときだけ有効（アルファベット混じりは誤読として捨てる）
+function validCode(t){t=String(t||"").trim();return new RegExp("^\\d{"+BARCODE_LEN+"}$").test(t)?t:null}
+async function stopScan(){if(scanner){await scanner.stop().catch(()=>{});scanner.clear?.();scanner=null}
+  $("reader").innerHTML="";$("scan").textContent="▥ 出荷指示書を読み取る";scanMsg("")}
+let accepting=false;
+function accept(code){if(accepting)return;accepting=true;$("number").value=code;stopScan().then(()=>{accepting=false;show(code)})}
 $("scan").onclick=async()=>{
-  if(scanner){await scanner.stop().catch(()=>{});scanner=null;$("reader").innerHTML="";return}
+  if(scanner){await stopScan();return}
   if(typeof Html5Qrcode==="undefined"){alert("読み取り機能を読み込めません。通信を確認してください。");return}
-  scanner=new Html5Qrcode("reader");
-  try{await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:280,height:120}},async t=>{
-    await scanner.stop();scanner=null;$("reader").innerHTML="";$("number").value=t;show(t)})}
-  catch(e){scanner=null;alert("カメラを起動できません。カメラの許可を確認してください。")}
+  lastCode="";sameCnt=0;
+  scanner=new Html5Qrcode("reader",{formatsToSupport:fmts(),verbose:false,
+    experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
+  const cfg={fps:20,disableFlip:true,
+    // 横長のバーコードに合わせて、画面幅の90%×高さ35%を読み取り範囲にする
+    qrbox:(w,h)=>({width:Math.floor(w*0.9),height:Math.max(80,Math.floor(Math.min(h,w)*0.35))}),
+    videoConstraints:{facingMode:"environment",width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:"continuous"}]}};
+  try{
+    await scanner.start({facingMode:"environment"},cfg,t=>{
+      const c=validCode(t);
+      if(!c){scanMsg("読み取り直し中…（バーコードを枠に合わせてください）");return}
+      if(c===lastCode)sameCnt++;else{lastCode=c;sameCnt=1}
+      if(sameCnt>=NEED_SAME)accept(c);else scanMsg("確認中… "+c);
+    },()=>{});
+    $("scan").textContent="✖ 読み取りをやめる";
+    scanMsg("バーコードを横長の枠に合わせてください（10〜20cm離すとピントが合います）");
+  }catch(e){scanner=null;alert("カメラを起動できません。カメラの許可を確認してください。")}
+};
+// 写真で読む：iPad標準カメラで撮影した1枚から読み取る（ピントが合いやすい）
+$("photoScan").onclick=async()=>{await stopScan();$("photoFile").value="";$("photoFile").click()};
+$("photoFile").onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  scanMsg("写真から読み取り中…");
+  const tmp=new Html5Qrcode("reader",{formatsToSupport:fmts(),verbose:false});
+  try{const c=validCode(await tmp.scanFile(f,false));
+    if(c){scanMsg("");$("number").value=c;show(c)}
+    else scanMsg("番号を正しく読めませんでした。もう一度撮影するか、番号を入力してください。")}
+  catch(err){scanMsg("バーコードが見つかりませんでした。バーコードを大きく、まっすぐ撮影してください。")}
+  finally{tmp.clear?.()}
 };
 init();
 </script>
